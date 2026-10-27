@@ -120,6 +120,16 @@ class ApiClient {
     });
   }
 
+  async updateUserByAdmin(
+    id: string,
+    data: { name?: string; role?: 'user' | 'admin'; interests?: string[] }
+  ): Promise<User> {
+    return this.request<User>(`/users/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
   async deleteUser(id: string): Promise<{ deleted: boolean }> {
     return this.request<{ deleted: boolean }>(`/users/${id}`, {
       method: 'DELETE',
