@@ -40,17 +40,23 @@ class ApiClient {
       headers,
     });
 
-    const data = await response.json();
+    const contentType = response.headers.get('content-type') || '';
+    const isJson = contentType.includes('application/json');
+    const data = isJson ? await response.json() : null;
 
     if (!response.ok) {
       const errorMsg =
-        data.message ||
-        (Array.isArray(data.message) ? data.message.join(', ') : 'Request failed');
+        data?.message ||
+        (Array.isArray(data?.message) ? data.message.join(', ') : null) ||
+        (isJson ? 'Request failed' : `Server connection error (${response.status} ${response.statusText})`);
       throw new Error(errorMsg);
     }
 
     // Unpack response envelope ({ success: true, data: ... })
-    return data.data !== undefined ? data.data : data;
+    if (data && typeof data === 'object' && 'data' in data && data.data !== undefined) {
+      return data.data;
+    }
+    return data;
   }
 
   // Auth
