@@ -543,7 +543,7 @@ export default function App() {
 
           {/* Tab 5: API Docs */}
           <a
-            href="http://localhost:3000/api/docs"
+            href="/api/docs"
             target="_blank"
             rel="noreferrer"
             className="px-2.5 py-1.5 text-xs font-medium text-slate-400 hover:text-white flex items-center gap-1 transition"
