@@ -26,9 +26,7 @@ import {
   Italic,
   Code,
   MessageSquare,
-  Send,
-  Calendar,
-  Sparkles,
+  UserPlus,
   ArrowUpDown
 } from 'lucide-react';
 import { api } from './api/client';
@@ -37,8 +35,8 @@ import { InterestGroup, Note, PaginatedResponse, Post, User } from './types';
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'my-notes' | 'public-posts' | 'admin-aggregations'>('my-notes');
-  const [adminSubTab, setAdminSubTab] = useState<'scenario-1' | 'scenario-2' | 'users-dir'>('scenario-1');
+  const [activeTab, setActiveTab] = useState<'my-notes' | 'public-posts' | 'user-management' | 'admin-aggregations'>('my-notes');
+  const [aggregationSubTab, setAggregationSubTab] = useState<'scenario-1' | 'scenario-2'>('scenario-1');
 
   // Auth form states
   const [isRegister, setIsRegister] = useState(false);
@@ -74,10 +72,12 @@ export default function App() {
   // Admin users state & edit modal
   const [adminUsers, setAdminUsers] = useState<PaginatedResponse<User> | null>(null);
   const [adminUserPage, setAdminUserPage] = useState(1);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [newAdminPassword, setNewAdminPassword] = useState('');
   const [newAdminName, setNewAdminName] = useState('');
   const [newAdminRole, setNewAdminRole] = useState<'user' | 'admin'>('user');
+  const [newAdminInterests, setNewAdminInterests] = useState('general, coding');
   const [showAddUserModal, setShowAddUserModal] = useState(false);
 
   // Edit user state
@@ -120,6 +120,13 @@ export default function App() {
       api.getPosts(publicPostsPage, 10)
         .then((res) => setPublicPosts(res.items))
         .catch((err) => console.error('Fetch public posts error:', err));
+    } else if (activeTab === 'user-management') {
+      api.getUsers(adminUserPage, 10)
+        .then((res) => {
+          setAdminUsers(res);
+          setAllUsersList(res.items);
+        })
+        .catch((err) => console.error('Get users error:', err));
     } else if (activeTab === 'admin-aggregations') {
       // Load Scenario 1
       api.getGroupByInterests()
@@ -127,9 +134,8 @@ export default function App() {
         .catch((err) => console.error('Scenario 1 error:', err));
 
       // Load Users Directory & authors list
-      api.getUsers(adminUserPage, 10)
+      api.getUsers(1, 50)
         .then((res) => {
-          setAdminUsers(res);
           setAllUsersList(res.items);
           if (res.items.length > 0 && !selectedAuthorId) {
             setSelectedAuthorId(res.items[0].id);
@@ -244,20 +250,28 @@ export default function App() {
   const handleAddUserByAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const interestsArray = newAdminInterests
+        .split(',')
+        .map((i) => i.trim())
+        .filter(Boolean);
+
       await api.createUserByAdmin({
         email: newAdminEmail,
         password: newAdminPassword,
         name: newAdminName,
         role: newAdminRole,
-        interests: ['general'],
+        interests: interestsArray.length > 0 ? interestsArray : ['general'],
       });
+
       setShowAddUserModal(false);
       setNewAdminEmail('');
       setNewAdminPassword('');
       setNewAdminName('');
+      setNewAdminInterests('general, coding');
       const res = await api.getUsers(adminUserPage, 10);
       setAdminUsers(res);
       setAllUsersList(res.items);
+      alert('New user created successfully!');
     } catch (err: any) {
       alert(err.message || 'Failed to create user');
     }
@@ -289,8 +303,6 @@ export default function App() {
       const res = await api.getUsers(adminUserPage, 10);
       setAdminUsers(res);
       setAllUsersList(res.items);
-      // Refresh Scenario 1
-      api.getGroupByInterests().then(setInterestGroups);
       alert('User updated successfully!');
     } catch (err: any) {
       alert(err.message || 'Failed to update user');
@@ -298,12 +310,13 @@ export default function App() {
   };
 
   const handleDeleteUser = async (id: string) => {
-    if (!confirm('Delete user account?')) return;
+    if (!confirm('Are you sure you want to remove/delete this user account?')) return;
     try {
       await api.deleteUser(id);
       const res = await api.getUsers(adminUserPage, 10);
       setAdminUsers(res);
       setAllUsersList(res.items);
+      alert('User removed successfully!');
     } catch (err: any) {
       alert(err.message || 'Failed to delete user');
     }
@@ -325,7 +338,6 @@ export default function App() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0B0F19] p-4 font-sans text-slate-100">
         <div className="w-full max-w-md bg-[#111827] border border-[#1E293B] rounded-xl shadow-2xl p-8 relative">
-          {/* Logo & Header */}
           <div className="text-center mb-6">
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-indigo-600/10 border border-indigo-500/30 text-indigo-400 mb-3 shadow-[0_0_15px_rgba(99,102,241,0.2)]">
               <Shield className="w-6 h-6" />
@@ -334,7 +346,6 @@ export default function App() {
             <p className="text-xs text-slate-400 mt-1">Zero-Knowledge Encrypted Note Vault</p>
           </div>
 
-          {/* Tab Switcher */}
           <div className="flex rounded-lg bg-[#0B0F19] p-1 border border-[#1E293B] mb-6">
             <button
               onClick={() => { setIsRegister(false); setAuthError(''); }}
@@ -421,7 +432,6 @@ export default function App() {
             </button>
           </form>
 
-          {/* Default Admin Seed Info */}
           <div className="mt-6 border-t border-[#1E293B] pt-4 text-center">
             <span className="text-[11px] text-slate-400 block mb-1">Seeded Administrator Credentials:</span>
             <div className="inline-block px-2.5 py-1 bg-[#0B0F19] rounded border border-[#1E293B] text-[11px] font-mono text-indigo-300">
@@ -466,12 +476,12 @@ export default function App() {
           </div>
         </div>
 
-        {/* Center: Main Tabs */}
-        <nav className="flex items-center gap-2">
+        {/* Center: Main Tabs (All core requirements directly accessible) */}
+        <nav className="flex items-center gap-1.5 md:gap-2">
           {/* Tab 1: My Notes */}
           <button
             onClick={() => setActiveTab('my-notes')}
-            className={`px-4 py-1.5 text-xs font-medium rounded-full transition flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 text-xs font-medium rounded-full transition flex items-center gap-1.5 ${
               activeTab === 'my-notes'
                 ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 shadow-[0_0_12px_rgba(99,102,241,0.15)] font-semibold'
                 : 'text-slate-400 hover:text-white'
@@ -481,47 +491,62 @@ export default function App() {
             My Notes
           </button>
 
-          {/* Tab 2: Public Posts (PDF Requirement: Users can write posts visible to everyone) */}
+          {/* Tab 2: Public Posts */}
           <button
             onClick={() => setActiveTab('public-posts')}
-            className={`px-4 py-1.5 text-xs font-medium rounded-full transition flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 text-xs font-medium rounded-full transition flex items-center gap-1.5 ${
               activeTab === 'public-posts'
                 ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 shadow-[0_0_12px_rgba(99,102,241,0.15)] font-semibold'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
             <MessageSquare className="w-3.5 h-3.5" />
-            Public Posts Feed
+            Public Posts
           </button>
 
-          {/* Tab 3: Admin Analytics & Aggregations */}
+          {/* Tab 3: User Management (Admin: Add, Remove, Update & List) */}
+          {user.role === 'admin' && (
+            <button
+              onClick={() => setActiveTab('user-management')}
+              className={`px-3.5 py-1.5 text-xs font-medium rounded-full transition flex items-center gap-1.5 ${
+                activeTab === 'user-management'
+                  ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 shadow-[0_0_12px_rgba(99,102,241,0.15)] font-semibold'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              User Management
+              <span className="text-[9px] font-mono uppercase px-1.5 py-0.2 rounded bg-purple-950/60 text-purple-300 border border-purple-500/30">
+                Admin
+              </span>
+            </button>
+          )}
+
+          {/* Tab 4: MongoDB Aggregations (Scenario 1 & 2) */}
           {user.role === 'admin' ? (
             <button
               onClick={() => setActiveTab('admin-aggregations')}
-              className={`px-4 py-1.5 text-xs font-medium rounded-full transition flex items-center gap-1.5 ${
+              className={`px-3.5 py-1.5 text-xs font-medium rounded-full transition flex items-center gap-1.5 ${
                 activeTab === 'admin-aggregations'
                   ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 shadow-[0_0_12px_rgba(99,102,241,0.15)] font-semibold'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
               <Database className="w-3.5 h-3.5" />
-              Admin Analytics & Aggregations
-              <span className="text-[9px] font-mono uppercase px-1.5 py-0.2 rounded bg-purple-950/60 text-purple-300 border border-purple-500/30">
-                Admin
-              </span>
+              Aggregations
             </button>
           ) : (
-            <span className="text-[11px] font-mono text-slate-600 px-3 py-1 bg-[#111827] rounded-full border border-[#1E293B]">
-              Role: Standard User
+            <span className="text-[11px] font-mono text-slate-500 px-2.5 py-1 bg-[#111827] rounded-full border border-[#1E293B]">
+              Standard User
             </span>
           )}
 
-          {/* Tab 4: API Docs */}
+          {/* Tab 5: API Docs */}
           <a
             href="http://localhost:3000/api/docs"
             target="_blank"
             rel="noreferrer"
-            className="px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-white flex items-center gap-1 transition"
+            className="px-2.5 py-1.5 text-xs font-medium text-slate-400 hover:text-white flex items-center gap-1 transition"
           >
             API Docs
             <ExternalLink className="w-3 h-3 text-slate-500" />
@@ -534,12 +559,11 @@ export default function App() {
             <Search className="w-3.5 h-3.5 text-slate-500" />
             <input
               type="text"
-              placeholder="Search notes..."
+              placeholder="Search..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-transparent border-none text-xs text-white placeholder-slate-500 focus:outline-none w-28 lg:w-36"
+              className="bg-transparent border-none text-xs text-white placeholder-slate-500 focus:outline-none w-24 lg:w-32"
             />
-            <span className="text-[10px] font-mono bg-[#1E293B] px-1 rounded text-slate-500">⌘K</span>
           </div>
 
           <div className="flex items-center gap-2 px-3 py-1 bg-[#111827] border border-[#1E293B] rounded-lg">
@@ -564,10 +588,9 @@ export default function App() {
 
       {/* 2. MAIN WORKSPACE CONTAINER */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-6">
-        {/* VIEW 1: MY NOTES (Stitch Screen 2 with full rich controls) */}
+        {/* VIEW 1: MY NOTES */}
         {activeTab === 'my-notes' && (
           <div className="space-y-6">
-            {/* Header & Quick Action Row */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2.5">
@@ -581,26 +604,22 @@ export default function App() {
                 </div>
                 <p className="text-xs text-slate-400 mt-1">
                   {user.role === 'admin'
-                    ? 'Audit view: Viewing all decrypted notes across platform. Edit/Delete disabled on foreign notes.'
+                    ? 'Audit view: Viewing all decrypted notes across platform. Foreign notes are read-only.'
                     : 'Manage your encrypted thoughts and sensitive records with strict ownership.'}
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={openCreateDrawer}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg shadow-[0_0_15px_rgba(99,102,241,0.3)] transition"
-                >
-                  <Plus className="w-4 h-4" />
-                  + New Note
-                  <span className="text-[10px] font-mono px-1 rounded bg-indigo-800">N</span>
-                </button>
-              </div>
+              <button
+                onClick={openCreateDrawer}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg shadow-[0_0_15px_rgba(99,102,241,0.3)] transition"
+              >
+                <Plus className="w-4 h-4" />
+                + New Note
+              </button>
             </div>
 
             {/* Filter Tags, Sort Dropdown & View Mode Switcher */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-2 bg-[#111827] border border-[#1E293B] rounded-xl text-xs">
-              {/* Category Filter Chips */}
               <div className="flex items-center gap-1.5 overflow-x-auto">
                 {['All', 'Work', 'Finance', 'Personal', 'Architecture'].map((category) => (
                   <button
@@ -617,7 +636,6 @@ export default function App() {
                 ))}
               </div>
 
-              {/* Utility Controls: Sort Dropdown + Grid/List View Toggles */}
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5 text-slate-400 font-mono text-[11px]">
                   <ArrowUpDown className="w-3 h-3 text-slate-500" />
@@ -648,15 +666,10 @@ export default function App() {
                     <List className="w-3.5 h-3.5" />
                   </button>
                 </div>
-
-                <div className="text-[11px] font-mono text-slate-500 flex items-center gap-1.5 pl-2 border-l border-[#1E293B]">
-                  <span>Vaults Synced</span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                </div>
               </div>
             </div>
 
-            {/* Notes Rendering (Grid or List Mode) */}
+            {/* Notes Grid */}
             {filteredNotes.length === 0 ? (
               <div className="text-center py-16 bg-[#111827] border border-[#1E293B] rounded-xl">
                 <FileText className="w-10 h-10 text-slate-600 mx-auto mb-3" />
@@ -685,7 +698,6 @@ export default function App() {
                       <div className="absolute top-0 left-0 bottom-0 w-1 bg-indigo-500/80" />
 
                       <div>
-                        {/* Note Header & Badges */}
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-1.5">
                             <span className="px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-[#1E293B] text-indigo-300 border border-[#334155]">
@@ -702,7 +714,6 @@ export default function App() {
                           </span>
                         </div>
 
-                        {/* Title & Preview */}
                         <h3 className="font-display font-semibold text-white text-base mb-2 group-hover:text-indigo-300 transition">
                           {note.title}
                         </h3>
@@ -711,7 +722,6 @@ export default function App() {
                         </p>
                       </div>
 
-                      {/* Footer Actions */}
                       <div className="mt-5 pt-3 border-t border-[#1E293B] flex items-center justify-between">
                         <div className="text-[10px] font-mono text-slate-500">
                           {typeof note.owner === 'object' ? `By: ${note.owner.name}` : 'Owner Protected'}
@@ -758,7 +768,6 @@ export default function App() {
                 })}
               </div>
             ) : (
-              // List View Mode
               <div className="space-y-2">
                 {filteredNotes.map((note) => {
                   const isOwner =
@@ -810,38 +819,10 @@ export default function App() {
                 })}
               </div>
             )}
-
-            {/* Pagination Controls */}
-            {notesData && notesData.totalPages > 1 && (
-              <div className="flex items-center justify-between pt-4 border-t border-[#1E293B]">
-                <span className="text-xs font-mono text-slate-500">
-                  Page {notesData.page} of {notesData.totalPages} ({notesData.total} total notes)
-                </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    disabled={notesPage <= 1}
-                    onClick={() => setNotesPage((p) => Math.max(1, p - 1))}
-                    className="p-1.5 rounded bg-[#111827] border border-[#1E293B] text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-                  <span className="px-3 py-1 bg-[#1E293B] rounded text-xs font-mono text-white">
-                    {notesPage}
-                  </span>
-                  <button
-                    disabled={notesPage >= notesData.totalPages}
-                    onClick={() => setNotesPage((p) => p + 1)}
-                    className="p-1.5 rounded bg-[#111827] border border-[#1E293B] text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
-        {/* VIEW 2: PUBLIC POSTS FEED (PDF: Users can write posts visible to everyone) */}
+        {/* VIEW 2: PUBLIC POSTS FEED */}
         {activeTab === 'public-posts' && (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
@@ -906,78 +887,226 @@ export default function App() {
           </div>
         )}
 
-        {/* VIEW 3: ADMIN ANALYTICS & AGGREGATIONS (Stitch Screen 3) */}
-        {activeTab === 'admin-aggregations' && (
+        {/* VIEW 3: DEDICATED USER MANAGEMENT (PDF: Add, Remove, Update & List All Users) */}
+        {activeTab === 'user-management' && (
           <div className="space-y-6">
-            {/* Header & Clearance */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2.5">
-                  <h2 className="text-xl font-bold font-display text-white">Admin Aggregation Analytics</h2>
+                  <h2 className="text-xl font-bold font-display text-white">User Management Console</h2>
                   <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-purple-950/60 border border-purple-500/30 text-purple-300">
-                    Tier 1 Clearance
+                    Admin Only
                   </span>
                 </div>
                 <p className="text-xs text-slate-400 mt-1">
-                  Real-time MongoDB single-pipeline aggregations and user directory audit.
+                  Full CRUD capabilities: Add new user, remove user, update role & interests, and list all registered users.
                 </p>
               </div>
 
-              {/* Sub-Tabs Selector */}
+              <button
+                onClick={() => setShowAddUserModal(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg shadow-[0_0_15px_rgba(99,102,241,0.3)] transition"
+              >
+                <UserPlus className="w-4 h-4" />
+                + Add User (Admin)
+              </button>
+            </div>
+
+            {/* Quick Stat Bar */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4">
+                <span className="text-[11px] font-mono text-slate-500 uppercase block mb-1">Total Users (List)</span>
+                <span className="text-2xl font-bold font-display text-white">{adminUsers?.total || 0}</span>
+                <span className="text-[10px] text-emerald-400 block mt-1">100% Chronologically Indexed</span>
+              </div>
+              <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4">
+                <span className="text-[11px] font-mono text-slate-500 uppercase block mb-1">Role Permissions</span>
+                <span className="text-2xl font-bold font-display text-indigo-400">Strict RBAC</span>
+                <span className="text-[10px] text-slate-400 block mt-1">Admin & User Isolation</span>
+              </div>
+              <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4">
+                <span className="text-[11px] font-mono text-slate-500 uppercase block mb-1">Actions Supported</span>
+                <span className="text-2xl font-bold font-display text-white">Add • Edit • Remove</span>
+                <span className="text-[10px] text-indigo-400 block mt-1">Live Backend Persistence</span>
+              </div>
+            </div>
+
+            {/* User Directory Table */}
+            <div className="bg-[#111827] border border-[#1E293B] rounded-xl overflow-hidden shadow">
+              <div className="p-4 border-b border-[#1E293B] flex items-center justify-between">
+                <h3 className="font-display font-semibold text-white text-sm">
+                  Registered Users (Showing page {adminUserPage} of {adminUsers?.totalPages || 1})
+                </h3>
+                <div className="text-xs font-mono text-slate-500">
+                  Total {adminUsers?.total || 0} accounts
+                </div>
+              </div>
+
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-[#0B0F19] text-slate-400 font-mono text-[11px] uppercase border-b border-[#1E293B]">
+                  <tr>
+                    <th className="px-4 py-3">User Name</th>
+                    <th className="px-4 py-3">Email Address</th>
+                    <th className="px-4 py-3">Role</th>
+                    <th className="px-4 py-3">Interests Array</th>
+                    <th className="px-4 py-3 text-right">Actions (Update / Remove)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1E293B]">
+                  {adminUsers?.items.map((u) => (
+                    <tr key={u.id} className="hover:bg-[#1E293B]/40 transition">
+                      <td className="px-4 py-3 font-medium text-white flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-indigo-600/20 text-indigo-400 flex items-center justify-center font-bold text-[11px] border border-indigo-500/30">
+                          {u.name.charAt(0).toUpperCase()}
+                        </div>
+                        {u.name}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-slate-400">{u.email}</td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider ${
+                          u.role === 'admin' ? 'bg-purple-950/80 text-purple-300 border border-purple-500/30' : 'bg-blue-950/80 text-blue-300 border border-blue-500/30'
+                        }`}>
+                          {u.role}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1">
+                          {u.interests && u.interests.length > 0 ? (
+                            u.interests.map((i) => (
+                              <span key={i} className="px-1.5 py-0.5 bg-[#0B0F19] rounded text-[10px] font-mono text-slate-400 border border-[#1E293B]">
+                                {i}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-[10px] font-mono text-slate-600 italic">No interests</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* Update User Button */}
+                          <button
+                            onClick={() => openEditUserModal(u)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-[#0B0F19] hover:bg-[#1E293B] text-slate-300 hover:text-indigo-400 border border-[#1E293B] text-[11px] transition font-medium"
+                            title="Update User Profile & Role"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            Update
+                          </button>
+
+                          {/* Remove User Button */}
+                          {u.id !== user.id ? (
+                            <button
+                              onClick={() => handleDeleteUser(u.id)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-red-950/20 hover:bg-red-950/60 text-red-400 border border-red-500/30 text-[11px] transition font-medium"
+                              title="Remove User"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              Remove
+                            </button>
+                          ) : (
+                            <span className="text-[10px] font-mono text-slate-600 px-2 py-1">Current User</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {/* Pagination Controls */}
+              {adminUsers && adminUsers.totalPages > 1 && (
+                <div className="flex items-center justify-between p-4 border-t border-[#1E293B]">
+                  <span className="text-xs font-mono text-slate-500">
+                    Page {adminUsers.page} of {adminUsers.totalPages}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      disabled={adminUserPage <= 1}
+                      onClick={() => setAdminUserPage((p) => Math.max(1, p - 1))}
+                      className="p-1.5 rounded bg-[#0B0F19] border border-[#1E293B] text-slate-400 hover:text-white disabled:opacity-30"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <span className="px-3 py-1 bg-[#1E293B] rounded text-xs font-mono text-white">
+                      {adminUserPage}
+                    </span>
+                    <button
+                      disabled={adminUserPage >= adminUsers.totalPages}
+                      onClick={() => setAdminUserPage((p) => p + 1)}
+                      className="p-1.5 rounded bg-[#0B0F19] border border-[#1E293B] text-slate-400 hover:text-white disabled:opacity-30"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* VIEW 4: MONGODB AGGREGATIONS (Scenario 1 & Scenario 2) */}
+        {activeTab === 'admin-aggregations' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2.5">
+                  <h2 className="text-xl font-bold font-display text-white">MongoDB Aggregation Pipelines</h2>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-purple-950/60 border border-purple-500/30 text-purple-300">
+                    PDF Section 4(B)
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  Single aggregation pipeline operations for Scenario 1 and Scenario 2.
+                </p>
+              </div>
+
               <div className="flex rounded-lg bg-[#111827] p-1 border border-[#1E293B] text-xs">
                 <button
-                  onClick={() => setAdminSubTab('scenario-1')}
+                  onClick={() => setAggregationSubTab('scenario-1')}
                   className={`px-3 py-1.5 rounded-md font-medium transition ${
-                    adminSubTab === 'scenario-1' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+                    aggregationSubTab === 'scenario-1' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  Scenario 1: Interests
+                  Scenario 1: Interests ($group)
                 </button>
                 <button
-                  onClick={() => setAdminSubTab('scenario-2')}
+                  onClick={() => setAggregationSubTab('scenario-2')}
                   className={`px-3 py-1.5 rounded-md font-medium transition ${
-                    adminSubTab === 'scenario-2' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+                    aggregationSubTab === 'scenario-2' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
                   }`}
                 >
                   Scenario 2: User Posts ($lookup)
                 </button>
-                <button
-                  onClick={() => setAdminSubTab('users-dir')}
-                  className={`px-3 py-1.5 rounded-md font-medium transition ${
-                    adminSubTab === 'users-dir' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Users Directory
-                </button>
               </div>
             </div>
 
-            {/* 4 KPI Summary Cards */}
+            {/* KPI Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4">
-                <span className="text-[11px] font-mono text-slate-500 uppercase block mb-1">Total Users</span>
-                <span className="text-2xl font-bold font-display text-white">{adminUsers?.total || 0}</span>
-                <span className="text-[10px] text-emerald-400 block mt-1">100% Indexed</span>
-              </div>
-              <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4">
-                <span className="text-[11px] font-mono text-slate-500 uppercase block mb-1">Scenario 1 Interests</span>
+                <span className="text-[11px] font-mono text-slate-500 uppercase block mb-1">Scenario 1 Categories</span>
                 <span className="text-2xl font-bold font-display text-white">{interestGroups.length}</span>
                 <span className="text-[10px] text-indigo-400 block mt-1">Single-Call $group</span>
               </div>
               <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4">
-                <span className="text-[11px] font-mono text-slate-500 uppercase block mb-1">Scenario 2 Posts</span>
+                <span className="text-[11px] font-mono text-slate-500 uppercase block mb-1">Scenario 2 Joined Posts</span>
                 <span className="text-2xl font-bold font-display text-white">{authorPosts.length}</span>
-                <span className="text-[10px] text-indigo-400 block mt-1">Joined via $lookup</span>
+                <span className="text-[10px] text-emerald-400 block mt-1">Joined via $lookup</span>
               </div>
               <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4">
-                <span className="text-[11px] font-mono text-slate-500 uppercase block mb-1">Execution Mode</span>
+                <span className="text-[11px] font-mono text-slate-500 uppercase block mb-1">Index Execution Mode</span>
                 <span className="text-2xl font-bold font-display text-emerald-400">IXSCAN</span>
-                <span className="text-[10px] text-slate-400 block mt-1">Zero Redundant Indexes</span>
+                <span className="text-[10px] text-slate-400 block mt-1">author_1_createdAt_-1</span>
+              </div>
+              <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4">
+                <span className="text-[11px] font-mono text-slate-500 uppercase block mb-1">Pipeline Call Count</span>
+                <span className="text-2xl font-bold font-display text-white">Exactly 1</span>
+                <span className="text-[10px] text-indigo-400 block mt-1">Single Stage Call</span>
               </div>
             </div>
 
-            {/* SUB-TAB 1: SCENARIO 1 - GROUP USERS BY INTERESTS */}
-            {adminSubTab === 'scenario-1' && (
+            {/* SUB-TAB 1: SCENARIO 1 */}
+            {aggregationSubTab === 'scenario-1' && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between p-3 bg-[#111827] border border-[#1E293B] rounded-xl text-xs">
                   <div className="flex items-center gap-2">
@@ -994,7 +1123,7 @@ export default function App() {
 
                 {interestGroups.length === 0 ? (
                   <div className="text-center py-12 bg-[#111827] border border-[#1E293B] rounded-xl text-xs text-slate-400">
-                    No interest groups aggregated. Register users with interests to see them categorized here.
+                    No interest groups aggregated.
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1033,8 +1162,8 @@ export default function App() {
               </div>
             )}
 
-            {/* SUB-TAB 2: SCENARIO 2 - USER POSTS AGGREGATION VIA $LOOKUP */}
-            {adminSubTab === 'scenario-2' && (
+            {/* SUB-TAB 2: SCENARIO 2 */}
+            {aggregationSubTab === 'scenario-2' && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between p-3 bg-[#111827] border border-[#1E293B] rounded-xl text-xs">
                   <div className="flex items-center gap-2">
@@ -1050,7 +1179,6 @@ export default function App() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {/* Left Column: Author Selector */}
                   <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-5 space-y-4">
                     <h3 className="font-display font-semibold text-white text-sm">Select Target User</h3>
                     <div>
@@ -1083,14 +1211,13 @@ export default function App() {
                           <span className="text-slate-300 font-mono text-[11px]">{selectedAuthor.interests?.join(', ') || 'None'}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-slate-400">Aggregated Posts:</span>
+                          <span className="text-slate-400">Joined Posts Count:</span>
                           <span className="font-mono text-emerald-400 font-bold">{authorPosts.length}</span>
                         </div>
                       </div>
                     )}
                   </div>
 
-                  {/* Right Column: Joined Posts Feed */}
                   <div className="md:col-span-2 space-y-3">
                     <div className="flex items-center justify-between">
                       <h3 className="font-display font-semibold text-white text-sm">
@@ -1101,7 +1228,7 @@ export default function App() {
 
                     {authorPosts.length === 0 ? (
                       <div className="text-center py-12 bg-[#111827] border border-[#1E293B] rounded-xl text-xs text-slate-400">
-                        No posts found for this user. You can publish a post in the "Public Posts Feed" tab.
+                        No posts found for this user. You can publish a post in the "Public Posts" tab.
                       </div>
                     ) : (
                       <div className="space-y-3">
@@ -1131,95 +1258,11 @@ export default function App() {
                 </div>
               </div>
             )}
-
-            {/* SUB-TAB 3: USERS DIRECTORY TABLE (With Edit & Delete User actions) */}
-            {adminSubTab === 'users-dir' && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-display font-semibold text-white text-sm">Registered Users Directory</h3>
-                    <p className="text-[11px] text-slate-400">
-                      Manage platform users (Add, Remove, Update role & interests).
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setShowAddUserModal(true)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg shadow transition"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    + Add User (Admin)
-                  </button>
-                </div>
-
-                <div className="bg-[#111827] border border-[#1E293B] rounded-xl overflow-hidden">
-                  <table className="w-full text-left text-xs text-slate-300">
-                    <thead className="bg-[#0B0F19] text-slate-400 font-mono text-[11px] uppercase border-b border-[#1E293B]">
-                      <tr>
-                        <th className="px-4 py-3">User</th>
-                        <th className="px-4 py-3">Email</th>
-                        <th className="px-4 py-3">Role</th>
-                        <th className="px-4 py-3">Interests</th>
-                        <th className="px-4 py-3 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#1E293B]">
-                      {adminUsers?.items.map((u) => (
-                        <tr key={u.id} className="hover:bg-[#1E293B]/40 transition">
-                          <td className="px-4 py-3 font-medium text-white flex items-center gap-2">
-                            <div className="w-6 h-6 rounded-full bg-indigo-600/20 text-indigo-400 flex items-center justify-center font-bold text-[10px]">
-                              {u.name.charAt(0).toUpperCase()}
-                            </div>
-                            {u.name}
-                          </td>
-                          <td className="px-4 py-3 font-mono text-slate-400">{u.email}</td>
-                          <td className="px-4 py-3">
-                            <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider ${
-                              u.role === 'admin' ? 'bg-purple-950/80 text-purple-300 border border-purple-500/30' : 'bg-blue-950/80 text-blue-300 border border-blue-500/30'
-                            }`}>
-                              {u.role}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex flex-wrap gap-1">
-                              {u.interests?.map((i) => (
-                                <span key={i} className="px-1.5 py-0.5 bg-[#0B0F19] rounded text-[10px] font-mono text-slate-400 border border-[#1E293B]">
-                                  {i}
-                                </span>
-                              ))}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <button
-                                onClick={() => openEditUserModal(u)}
-                                className="p-1 rounded hover:bg-[#1E293B] text-slate-400 hover:text-indigo-400 transition"
-                                title="Edit User (Update role/interests)"
-                              >
-                                <Edit3 className="w-3.5 h-3.5" />
-                              </button>
-                              {u.id !== user.id && (
-                                <button
-                                  onClick={() => handleDeleteUser(u.id)}
-                                  className="p-1 rounded hover:bg-red-950/40 text-slate-500 hover:text-red-400 transition"
-                                  title="Delete User"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
           </div>
         )}
       </main>
 
-      {/* 3. SLIDE-OVER DRAWER FOR CREATE / EDIT NOTE (With Rich Toolbar & Category Tags) */}
+      {/* 3. SLIDE-OVER DRAWER FOR CREATE / EDIT NOTE */}
       {isDrawerOpen && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm">
           <div className="w-full max-w-lg bg-[#111827] border-l border-[#1E293B] h-full p-6 shadow-2xl flex flex-col justify-between">
@@ -1420,7 +1463,7 @@ export default function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="w-full max-w-md bg-[#111827] border border-[#1E293B] rounded-xl p-6 shadow-2xl">
             <div className="flex items-center justify-between pb-3 border-b border-[#1E293B] mb-4">
-              <h3 className="font-display font-bold text-white text-base">Edit User Profile & Role</h3>
+              <h3 className="font-display font-bold text-white text-base">Update User (Role & Interests)</h3>
               <button onClick={() => setEditingUser(null)} className="text-slate-400 hover:text-white">
                 <X className="w-4 h-4" />
               </button>
@@ -1449,20 +1492,20 @@ export default function App() {
               </div>
 
               <div>
-                <label className="block text-[11px] font-mono uppercase text-slate-400 mb-1">Role</label>
+                <label className="block text-[11px] font-mono uppercase text-slate-400 mb-1">Role Permission</label>
                 <select
                   value={editUserRole}
                   onChange={(e) => setEditUserRole(e.target.value as 'user' | 'admin')}
                   className="w-full px-3 py-1.5 bg-[#0B0F19] border border-[#1E293B] rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
                 >
-                  <option value="user">User</option>
-                  <option value="admin">Admin</option>
+                  <option value="user">User (Standard)</option>
+                  <option value="admin">Admin (Full Access)</option>
                 </select>
               </div>
 
               <div>
                 <label className="block text-[11px] font-mono uppercase text-slate-400 mb-1">
-                  Interests <span className="text-[10px] text-slate-500">(comma-separated)</span>
+                  Interests Array <span className="text-[10px] text-slate-500">(comma-separated)</span>
                 </label>
                 <input
                   type="text"
@@ -1484,7 +1527,7 @@ export default function App() {
                   type="submit"
                   className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg shadow"
                 >
-                  Save Changes
+                  Update User
                 </button>
               </div>
             </form>
@@ -1497,7 +1540,7 @@ export default function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="w-full max-w-md bg-[#111827] border border-[#1E293B] rounded-xl p-6 shadow-2xl">
             <div className="flex items-center justify-between pb-3 border-b border-[#1E293B] mb-4">
-              <h3 className="font-display font-bold text-white text-base">Provision New User</h3>
+              <h3 className="font-display font-bold text-white text-base">Add New User (Admin Provision)</h3>
               <button onClick={() => setShowAddUserModal(false)} className="text-slate-400 hover:text-white">
                 <X className="w-4 h-4" />
               </button>
@@ -1547,9 +1590,22 @@ export default function App() {
                   onChange={(e) => setNewAdminRole(e.target.value as 'user' | 'admin')}
                   className="w-full px-3 py-1.5 bg-[#0B0F19] border border-[#1E293B] rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
                 >
-                  <option value="user">User</option>
-                  <option value="admin">Admin</option>
+                  <option value="user">User (Standard)</option>
+                  <option value="admin">Admin (Full Access)</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-mono uppercase text-slate-400 mb-1">
+                  Interests Array <span className="text-[10px] text-slate-500">(comma-separated)</span>
+                </label>
+                <input
+                  type="text"
+                  value={newAdminInterests}
+                  onChange={(e) => setNewAdminInterests(e.target.value)}
+                  placeholder="crypto, backend, devops"
+                  className="w-full px-3 py-1.5 bg-[#0B0F19] border border-[#1E293B] rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
+                />
               </div>
 
               <div className="pt-3 border-t border-[#1E293B] flex justify-end gap-2">
@@ -1564,7 +1620,7 @@ export default function App() {
                   type="submit"
                   className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg shadow"
                 >
-                  Create User
+                  Create & Save User
                 </button>
               </div>
             </form>
