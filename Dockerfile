@@ -18,6 +18,6 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 # Copy compiled static assets from builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-EXPOSE 80
+EXPOSE 80 9996
 
 CMD ["nginx", "-g", "daemon off;"]
